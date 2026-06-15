@@ -1,29 +1,49 @@
 #include <iostream>
+#include <vector>
+#include <string>
 #include "types.h"
 #include "direction.h"
 
-int main() {
-    std::cout << "=== Canny Edge Detection Pipeline  ===" << std::endl;
+// Simple helper to print pipeline execution status
+void logStatus(const std::string& message) {
+    std::cout << "[INFO] " << message << std::endl;
+}
 
-    //  a fake 2x2 gradient input image
+int main(int argc, char* argv[]) {
+    std::cout << "=== Canny Edge Detection Pipeline ===" << std::endl;
+
+    // Default image dimensions if no file loading infrastructure is ready yet
+    int width = 512;
+    int height = 512;
+    int total_pixels = width * height;
+
+    logStatus("Initializing input gradient image buffers (" + std::to_string(width) + "x" + std::to_string(height) + ")...");
+    
+    // Allocate generalized image buffers
     Image16 gx;
-    gx.width = 2;
-    gx.height = 2;
-    gx.data = {100, 0,  5,  -50}; // Pure horizontal, Flat, Pure vertical, Diagonal 135°
+    gx.width = width;
+    gx.height = height;
+    gx.data.resize(total_pixels, 0); // Filled with flat baseline data
 
     Image16 gy;
-    gy.width = 2;
-    gy.height = 2;
-    gy.data = {0,   0, 200,  50}; // Perpendicular matching vectors
+    gy.width = width;
+    gy.height = height;
+    gy.data.resize(total_pixels, 0);
 
-    std::cout << "Running gradient quantization engine..." << std::endl;
-    Image result = gradientDirection(gx, gy);
+    // TODO: Plug in image loader here (e.g., LoadPPM/LoadPGM) when asset loading is merged
+    if (argc > 1) {
+        std::string inputFile = argv[1];
+        logStatus("Target image file specified: " + inputFile);
+    } else {
+        logStatus("No input image specified. Running pipeline simulation on baseline synthetic data.");
+    }
 
-    // Printing the results to verify the tags
-    std::cout << "Pixel [0] (Expected 0): " << (int)result.data[0] << std::endl;
-    std::cout << "Pixel [1] (Expected 0): " << (int)result.data[1] << std::endl;
-    std::cout << "Pixel [2] (Expected 2): " << (int)result.data[2] << std::endl;
-    std::cout << "Pixel [3] (Expected 3): " << (int)result.data[3] << std::endl;
+    // Execute your validated gradient quantization logic across the full image
+    logStatus("Executing gradient direction quantization engine...");
+    Image edge_directions = gradientDirection(gx, gy);
 
-	    return 0;
+    logStatus("Gradient quantization phase completed successfully!");
+    std::cout << "Total pixels processed: " << edge_directions.data.size() << std::endl;
+
+    return 0;
 }
