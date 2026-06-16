@@ -9,8 +9,8 @@ TEST(GaussianBlurTest, UniformImageStaysUniform) {
     input.height = H;
     input.data.resize(W * H, 128);
     Image output = gaussianBlur(input);
-    for (int y =3; y < H -3; y++) {
-        for (int x = 3; x < W - 3; x++) {
+    for (int y =2; y < H -2; y++) {
+        for (int x = 2; x < W - 2; x++) {
             EXPECT_NEAR(output.data[y * W + x], 128, 1);
         }
     }
@@ -43,8 +43,7 @@ TEST(GaussianBlurTest, ImpulseSpreadsSymmetrically) {
     Image output = gaussianBlur(input);
     EXPECT_EQ(output.data[cy * W + (cx-1)], output.data[cy * W + (cx+1)]);
     EXPECT_EQ(output.data[(cy-1) * W + cx], output.data[(cy+1) * W + cx]);
-    EXPECT_GT(output.data[cy * W + cx],     output.data[cy * W + (cx+1)]);
-}
+    EXPECT_GT(output.data[cy * W + cx],     output.data[cy * W + (cx+1)]);}
 // Test 4: Output image must have same dimensions as input
 TEST(GaussianBlurTest, OutputDimensionsMatchInput) {
     int W = 100, H = 80;
@@ -56,6 +55,43 @@ TEST(GaussianBlurTest, OutputDimensionsMatchInput) {
     EXPECT_EQ(output.width,  W);
     EXPECT_EQ(output.height, H);
     EXPECT_EQ((int)output.data.size(), W * H);
+}
+
+// Test 5: Non-power-of-two dimensions must work correctly
+TEST(GaussianBlurTest, NonPowerOfTwoSize) {
+    int W = 100, H = 75;
+    Image input;
+    input.width  = W;
+    input.height = H;
+    input.data.resize(W * H, 0);
+    Image output = gaussianBlur(input);
+    EXPECT_EQ(output.width,  W);
+    EXPECT_EQ(output.height, H);
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            EXPECT_EQ(output.data[y * W + x], 0);
+}
+// Test 6: Border pixels must be valid values (not garbage) after zero-padding
+TEST(GaussianBlurTest, BorderPixelsAreValid) {
+    int W = 64, H = 64;
+    Image input;
+    input.width  = W;
+    input.height = H;
+    input.data.resize(W * H, 128);
+    Image output = gaussianBlur(input);
+    // check all 4 border pixels are within valid range [0, 255]
+    for (int x = 0; x < W; x++) {
+        EXPECT_GE(output.data[0 * W + x], 0);
+        EXPECT_LE(output.data[0 * W + x], 255);
+        EXPECT_GE(output.data[(H-1) * W + x], 0);
+        EXPECT_LE(output.data[(H-1) * W + x], 255);
+    }
+    for (int y = 0; y < H; y++) {
+        EXPECT_GE(output.data[y * W + 0], 0);
+        EXPECT_LE(output.data[y * W + 0], 255);
+        EXPECT_GE(output.data[y * W + (W-1)], 0);
+        EXPECT_LE(output.data[y * W + (W-1)], 255);
+    }
 }
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
