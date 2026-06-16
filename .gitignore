@@ -35,3 +35,26 @@ compile_commands.json
 canny_baseline
 canny_scalar
 generate_test_img
+# Benchmark executables
+benchmark_O0
+benchmark_O2
+benchmark_O3
+benchmark_Os
+benchmark_Ofast
+benchmark_vec_report
+benchmark_rv_O3
+
+# RISC-V object files / local build outputs
+*.o
+
+# Generated reports and raw images
+vectorization_report.txt
+*.raw
+
+# Local compiled binaries
+canny_scalar
+generate_test_img
+test_sobel
+test_gaussian
+test_direction
+
