@@ -85,6 +85,10 @@ Image16 sobelX(const Image& input) {
             //
             // The magnitude of the value indicates how strong
             // the edge is at this pixel.
+// We cast to int16_t because it is sufficient to hold any Sobel result.
+// The maximum possible Sobel value is:
+// 4×255×2 + 2×255×1 = 2550
+// int16_t can hold up to 32,767 so 2550 fits safely with no overflow.
             output.data[y * output.width + x] =
                 static_cast<int16_t>(sum);
         }
@@ -171,6 +175,10 @@ Image16 sobelY(const Image& input) {
             // Positive values mean intensity generally increases
             // from top to bottom, while negative values mean it
             // decreases from top to bottom.
+// We cast to int16_t because it is sufficient to hold any Sobel result.
+// The maximum possible Sobel value is:
+// 4×255×2 + 2×255×1 = 2550
+// int16_t can hold up to 32,767 so 2550 fits safely with no overflow.
             output.data[y * output.width + x] =
                 static_cast<int16_t>(sum);
         }
