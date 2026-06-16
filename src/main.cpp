@@ -1,49 +1,182 @@
 #include <iostream>
-#include <vector>
 #include <string>
+#include <stdexcept>
+
 #include "types.h"
+#include "image_io.h"
+#include "gaussian.h"
+#include "sobel.h"
+#include "gradient.h"
 #include "direction.h"
 
-// Simple helper to print pipeline execution status
-void logStatus(const std::string& message) {
-    std::cout << "[INFO] " << message << std::endl;
+// Prints how the user should run the program.
+// This is shown when the user gives the wrong number of arguments.
+static void printUsage(const char* programName) {
+    std::cout << "Usage:\n";
+    std::cout << "  " << programName
+              << " <input.raw> <width> <height> <output_prefix>\n\n";
+
+    std::cout << "Example:\n";
+    std::cout << "  " << programName
+              << " rect.raw 256 256 rect_output\n\n";
+
+    std::cout << "This means:\n";
+    std::cout << "  input.raw      = raw grayscale input image\n";
+    std::cout << "  width          = image width in pixels\n";
+    std::cout << "  height         = image height in pixels\n";
+    std::cout << "  output_prefix  = prefix used for all saved output files\n";
 }
 
 int main(int argc, char* argv[]) {
-    std::cout << "=== Canny Edge Detection Pipeline ===" << std::endl;
+    /*
+        Expected command-line arguments:
 
-    // Default image dimensions if no file loading infrastructure is ready yet
-    int width = 512;
-    int height = 512;
-    int total_pixels = width * height;
+        argv[0] = program name
+        argv[1] = input raw image file path
+        argv[2] = image width
+        argv[3] = image height
+        argv[4] = output file prefix
 
-    logStatus("Initializing input gradient image buffers (" + std::to_string(width) + "x" + std::to_string(height) + ")...");
-    
-    // Allocate generalized image buffers
-    Image16 gx;
-    gx.width = width;
-    gx.height = height;
-    gx.data.resize(total_pixels, 0); // Filled with flat baseline data
-
-    Image16 gy;
-    gy.width = width;
-    gy.height = height;
-    gy.data.resize(total_pixels, 0);
-
-    // TODO: Plug in image loader here (e.g., LoadPPM/LoadPGM) when asset loading is merged
-    if (argc > 1) {
-        std::string inputFile = argv[1];
-        logStatus("Target image file specified: " + inputFile);
-    } else {
-        logStatus("No input image specified. Running pipeline simulation on baseline synthetic data.");
+        So argc must be 5.
+    */
+    if (argc != 5) {
+        printUsage(argv[0]);
+        return 1;
     }
 
-    // Execute your validated gradient quantization logic across the full image
-    logStatus("Executing gradient direction quantization engine...");
-    Image edge_directions = gradientDirection(gx, gy);
+    try {
+        // Read command-line arguments.
+        std::string inputFileName = argv[1];
+        int imageWidth = std::stoi(argv[2]);
+        int imageHeight = std::stoi(argv[3]);
+        std::string outputFilePrefix = argv[4];
 
-    logStatus("Gradient quantization phase completed successfully!");
-    std::cout << "Total pixels processed: " << edge_directions.data.size() << std::endl;
+        // Basic validation to avoid invalid image sizes.
+        if (imageWidth <= 0 || imageHeight <= 0) {
+            std::cerr << "Error: image width and height must be positive numbers.\n";
+            return 1;
+        }
 
-    return 0;
+        std::cout << "=== Canny Edge Detection Scalar Pipeline ===\n\n";
+
+        /*
+            Step 1: Load raw grayscale image.
+
+            The input file is expected to contain exactly:
+                imageWidth * imageHeight bytes
+
+            Each byte represents one grayscale pixel:
+                0   = black
+                255 = white
+        */
+        std::cout << "[1/6] Loading input image...\n";
+        Image originalImage = loadRawImage(
+            inputFileName,
+            imageWidth,
+            imageHeight
+        );
+
+        /*
+            Step 2: Apply Gaussian blur.
+
+            Gaussian blur reduces small noise before edge detection.
+            This is important because Sobel detects sudden intensity changes.
+            Without smoothing, noise could be detected as false edges.
+
+             implementation used :
+                - 5x5 Gaussian kernel
+                - integer coefficients
+                - kernel sum = 273
+                - zero-padding at borders
+        */
+        std::cout << "[2/6] Applying Gaussian blur...\n";
+        Image blurredImage = gaussianBlur(originalImage);
+
+        /*
+            Step 3: Compute Sobel gradients.
+
+            Sobel X finds horizontal intensity changes.
+            A large Gx usually means a vertical edge.
+
+            Sobel Y finds vertical intensity changes.
+            A large Gy usually means a horizontal edge.
+
+            The outputs are Image16, not Image, because Sobel values:
+                - can be negative
+                - can be larger than 255
+        */
+        std::cout << "[3/6] Computing Sobel gradients...\n";
+        Image16 gradientX = sobelX(blurredImage);
+        Image16 gradientY = sobelY(blurredImage);
+
+        /*
+            Step 4: Compute L1 gradient magnitude.
+
+            L1 magnitude formula:
+                |Gx| + |Gy|
+        */
+        std::cout << "[4/6] Computing L1 gradient magnitude...\n";
+        Image magnitudeL1Image = magnitudeL1(gradientX, gradientY);
+
+        /*
+            Step 5: Compute L2 gradient magnitude.
+
+            L2 magnitude formula: sqrt(Gx^2 + Gy^2)
+        */
+        std::cout << "[5/6] Computing L2 gradient magnitude...\n";
+        Image magnitudeL2Image = magnitudeL2(gradientX, gradientY);
+
+        /*
+            Step 6: Quantize gradient direction.
+            We only classify the direction into 4 categories:
+
+                0 = 0 degrees
+                1 = 45 degrees
+                2 = 90 degrees
+                3 = 135 degrees
+        */
+        std::cout << "[6/6] Computing gradient direction...\n";
+        Image directionImage = gradientDirection(gradientX, gradientY);
+
+       
+           // Save output images: We save multiple outputs because each one helps with debugging
+           // blur image: confirms Gaussian blur works
+           //magnitude images: show detected edges
+           //direction image: shows quantized edge direction values
+
+        std::cout << "\nSaving output files...\n";
+
+        std::string blurOutputFile =
+            outputFilePrefix + "_blur.raw";
+
+        std::string magnitudeL1OutputFile =
+            outputFilePrefix + "_magnitude_l1.raw";
+
+        std::string magnitudeL2OutputFile =
+            outputFilePrefix + "_magnitude_l2.raw";
+
+        std::string directionOutputFile =
+            outputFilePrefix + "_direction.raw";
+
+        saveRawImage(blurOutputFile, blurredImage);
+        saveRawImage(magnitudeL1OutputFile, magnitudeL1Image);
+        saveRawImage(magnitudeL2OutputFile, magnitudeL2Image);
+        saveRawImage(directionOutputFile, directionImage);
+
+        
+        std::cout << "\nPipeline completed successfully.\n";
+        std::cout << "Generated files:\n";
+        std::cout << "  " << blurOutputFile << "\n";
+        std::cout << "  " << magnitudeL1OutputFile << "\n";
+        std::cout << "  " << magnitudeL2OutputFile << "\n";
+        std::cout << "  " << directionOutputFile << "\n";
+
+        return 0;
+    }
+    catch (const std::exception& error) {
+            // This catches errors such as:
+           // input file could not be opened, memory allocation failed , or output file could not be written
+        std::cerr << "Error: " << error.what() << "\n";
+        return 1;
+    }
 }
