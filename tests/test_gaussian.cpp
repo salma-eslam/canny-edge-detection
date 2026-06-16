@@ -71,27 +71,25 @@ TEST(GaussianBlurTest, NonPowerOfTwoSize) {
         for (int x = 0; x < W; x++)
             EXPECT_EQ(output.data[y * W + x], 0);
 }
-// Test 6: Border pixels must be valid values (not garbage) after zero-padding
-TEST(GaussianBlurTest, BorderPixelsAreValid) {
+// Test 6: Border pixels should reflect zero-padding behavior
+TEST(GaussianBlurTest, BorderUsesZeroPadding) {
     int W = 64, H = 64;
+
     Image input;
-    input.width  = W;
+    input.width = W;
     input.height = H;
     input.data.resize(W * H, 128);
+
     Image output = gaussianBlur(input);
-    // check all 4 border pixels are within valid range [0, 255]
-    for (int x = 0; x < W; x++) {
-        EXPECT_GE(output.data[0 * W + x], 0);
-        EXPECT_LE(output.data[0 * W + x], 255);
-        EXPECT_GE(output.data[(H-1) * W + x], 0);
-        EXPECT_LE(output.data[(H-1) * W + x], 255);
-    }
-    for (int y = 0; y < H; y++) {
-        EXPECT_GE(output.data[y * W + 0], 0);
-        EXPECT_LE(output.data[y * W + 0], 255);
-        EXPECT_GE(output.data[y * W + (W-1)], 0);
-        EXPECT_LE(output.data[y * W + (W-1)], 255);
-    }
+
+    // Interior pixel should remain approximately 128
+    EXPECT_NEAR(output.data[2 * W + 2], 128, 1);
+
+    // Border pixels should be lower than 128 because outside pixels
+    // are treated as zero during convolution.
+    EXPECT_LT(output.data[0 * W + 0], 128);          // top-left corner
+    EXPECT_LT(output.data[0 * W + W / 2], 128);      // top edge
+    EXPECT_LT(output.data[(H / 2) * W + 0], 128);    // left edge
 }
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
