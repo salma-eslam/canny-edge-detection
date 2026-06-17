@@ -58,3 +58,4 @@ test_sobel
 test_gaussian
 test_direction
 
+sobel_rvv_test
