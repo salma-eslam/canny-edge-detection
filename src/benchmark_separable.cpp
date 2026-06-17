@@ -22,8 +22,8 @@ static Image createTestImage(int width, int height) {
 }
 
 int main() {
-    const int width = 256;
-    const int height = 256;
+    const int width = 512;
+    const int height = 512;
     const int iterations = 100;
 
     std::cout << "=== Standard 2D vs Separable Gaussian Benchmark ===\n";

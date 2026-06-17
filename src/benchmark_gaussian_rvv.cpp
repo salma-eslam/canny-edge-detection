@@ -7,11 +7,17 @@
 #include <cstdlib>
 #include <iostream>
 #include <vector>
+#include <time.h>
 
-static inline uint64_t readCycle() {
-    uint64_t cycles;
-    asm volatile ("rdcycle %0" : "=r"(cycles));
-    return cycles;
+// Convert two timespec values into elapsed milliseconds.
+static double elapsedMilliseconds(const timespec& startTime, const timespec& endTime) {
+    double seconds =
+        static_cast<double>(endTime.tv_sec - startTime.tv_sec);
+
+    double nanoseconds =
+        static_cast<double>(endTime.tv_nsec - startTime.tv_nsec);
+
+    return (seconds * 1000.0) + (nanoseconds / 1000000.0);
 }
 
 static Image createTestImage(int width, int height) {
@@ -82,6 +88,7 @@ int main() {
     const int iterations = 100;
 
     std::cout << "=== Gaussian Scalar vs RVV Benchmark ===\n";
+    std::cout << "Timing method: clock_gettime(CLOCK_MONOTONIC)\n";
     std::cout << "Image size: " << width << "x" << height << "\n";
     std::cout << "Iterations: " << iterations << "\n\n";
 
@@ -110,7 +117,7 @@ int main() {
     std::cout << "RVV LMUL=1 checksum:  " << checksumImage(rvvLmul1Check) << "\n\n";
 
     // --------------------------------------------------------
-    // Pre-allocated output buffers for timed RVV runs
+    // Pre-allocated output buffers for timed RVV runs.
     // This avoids heap allocation inside the benchmark loop.
     // --------------------------------------------------------
     Image outputLmul4;
@@ -150,57 +157,68 @@ int main() {
     // Timed scalar baseline
     // --------------------------------------------------------
     uint64_t scalarChecksum = 0;
+    timespec scalarStart;
+    timespec scalarEnd;
 
-    uint64_t scalarStart = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &scalarStart);
 
     for (int i = 0; i < iterations; i++) {
         Image temp = gaussianBlur(input);
         scalarChecksum += temp.data[static_cast<size_t>(i) % temp.data.size()];
     }
 
-    uint64_t scalarEnd = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &scalarEnd);
 
     // --------------------------------------------------------
     // Timed RVV LMUL=4
     // --------------------------------------------------------
     uint64_t lmul4Checksum = 0;
+    timespec lmul4Start;
+    timespec lmul4End;
 
-    uint64_t lmul4Start = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &lmul4Start);
 
     for (int i = 0; i < iterations; i++) {
         gaussianBlurRVV(input, outputLmul4);
-        lmul4Checksum += outputLmul4.data[static_cast<size_t>(i) % outputLmul4.data.size()];
+        lmul4Checksum +=
+            outputLmul4.data[static_cast<size_t>(i) % outputLmul4.data.size()];
     }
 
-    uint64_t lmul4End = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &lmul4End);
 
     // --------------------------------------------------------
     // Timed RVV LMUL=2
     // --------------------------------------------------------
     uint64_t lmul2Checksum = 0;
+    timespec lmul2Start;
+    timespec lmul2End;
 
-    uint64_t lmul2Start = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &lmul2Start);
 
     for (int i = 0; i < iterations; i++) {
         gaussianBlurRVV_LMUL2(input, outputLmul2);
-        lmul2Checksum += outputLmul2.data[static_cast<size_t>(i) % outputLmul2.data.size()];
+        lmul2Checksum +=
+            outputLmul2.data[static_cast<size_t>(i) % outputLmul2.data.size()];
     }
 
-    uint64_t lmul2End = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &lmul2End);
 
     // --------------------------------------------------------
     // Timed RVV LMUL=1
     // --------------------------------------------------------
     uint64_t lmul1Checksum = 0;
+    timespec lmul1Start;
+    timespec lmul1End;
 
-    uint64_t lmul1Start = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &lmul1Start);
 
     for (int i = 0; i < iterations; i++) {
         gaussianBlurRVV_LMUL1(input, outputLmul1);
-        lmul1Checksum += outputLmul1.data[static_cast<size_t>(i) % outputLmul1.data.size()];
+        lmul1Checksum +=
+            outputLmul1.data[static_cast<size_t>(i) % outputLmul1.data.size()];
     }
 
-    uint64_t lmul1End = readCycle();
+    clock_gettime(CLOCK_MONOTONIC, &lmul1End);
 
     // Prevent compiler from removing benchmarked work.
     volatile uint64_t preventOptimization =
@@ -215,26 +233,26 @@ int main() {
     // --------------------------------------------------------
     // Results
     // --------------------------------------------------------
-    double scalarCycles =
-        static_cast<double>(scalarEnd - scalarStart) / iterations;
+    double scalarMs =
+        elapsedMilliseconds(scalarStart, scalarEnd) / iterations;
 
-    double lmul4Cycles =
-        static_cast<double>(lmul4End - lmul4Start) / iterations;
+    double lmul4Ms =
+        elapsedMilliseconds(lmul4Start, lmul4End) / iterations;
 
-    double lmul2Cycles =
-        static_cast<double>(lmul2End - lmul2Start) / iterations;
+    double lmul2Ms =
+        elapsedMilliseconds(lmul2Start, lmul2End) / iterations;
 
-    double lmul1Cycles =
-        static_cast<double>(lmul1End - lmul1Start) / iterations;
+    double lmul1Ms =
+        elapsedMilliseconds(lmul1Start, lmul1End) / iterations;
 
-    double speedupLmul4 = scalarCycles / lmul4Cycles;
-    double speedupLmul2 = scalarCycles / lmul2Cycles;
-    double speedupLmul1 = scalarCycles / lmul1Cycles;
+    double speedupLmul4 = scalarMs / lmul4Ms;
+    double speedupLmul2 = scalarMs / lmul2Ms;
+    double speedupLmul1 = scalarMs / lmul1Ms;
 
-    std::cout << "Scalar_Gaussian_cycles:     " << scalarCycles << "\n";
-    std::cout << "RVV_LMUL4_Gaussian_cycles:  " << lmul4Cycles << "\n";
-    std::cout << "RVV_LMUL2_Gaussian_cycles:  " << lmul2Cycles << "\n";
-    std::cout << "RVV_LMUL1_Gaussian_cycles:  " << lmul1Cycles << "\n\n";
+    std::cout << "Scalar_Gaussian_ms:     " << scalarMs << "\n";
+    std::cout << "RVV_LMUL4_Gaussian_ms:  " << lmul4Ms << "\n";
+    std::cout << "RVV_LMUL2_Gaussian_ms:  " << lmul2Ms << "\n";
+    std::cout << "RVV_LMUL1_Gaussian_ms:  " << lmul1Ms << "\n\n";
 
     std::cout << "Speedup_LMUL4_vs_Scalar:    " << speedupLmul4 << "x\n";
     std::cout << "Speedup_LMUL2_vs_Scalar:    " << speedupLmul2 << "x\n";
