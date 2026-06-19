@@ -2,6 +2,7 @@
 #include <string>
 #include <stdexcept>
 #include <time.h>
+#include "clock_shim.h"
 
 #include "types.h"
 #include "image_io.h"

@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include <time.h>
+#include "clock_shim.h"
 
 #include "types.h"
 

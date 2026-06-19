@@ -8,6 +8,7 @@
 #include <iostream>
 #include <vector>
 #include <time.h>
+#include "clock_shim.h"
 
 // Convert two timespec values into elapsed milliseconds.
 static double elapsedMilliseconds(const timespec& startTime, const timespec& endTime) {
