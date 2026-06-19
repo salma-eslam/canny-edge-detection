@@ -81,3 +81,7 @@ __pycache__/
 *.jpg
 *.jpeg
 *.jfif
+
+# Compiled test runners without extension
+tests/test_*_runner
+tests/test_separable_runner
