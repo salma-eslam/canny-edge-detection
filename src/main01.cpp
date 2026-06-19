@@ -5,10 +5,13 @@
 
 #include "types.h"
 #include "image_io.h"
-#include "gaussian.h"
+#include "gaussian_rvv.h"
 #include "sobel.h"
 #include "gradient.h"
 #include "direction.h"
+
+// RVV Sobel function implemented in sobel_rvv.cpp
+void sobel_fused_rvv(const Image& input, Image16& out_gx, Image16& out_gy);
 
 // Prints how the user should run the program.
 // This is shown when the user gives the wrong number of arguments.
@@ -19,7 +22,7 @@ static void printUsage(const char* programName) {
 
     std::cout << "Example:\n";
     std::cout << "  " << programName
-              << " rect.raw 256 256 rect_output\n\n";
+              << " input/ferrari_512.raw 512 512 output/ferrari_rvv\n\n";
 
     std::cout << "This means:\n";
     std::cout << "  input.raw      = raw grayscale input image\n";
@@ -69,7 +72,8 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        std::cout << "=== Canny Edge Detection Scalar Pipeline ===\n\n";
+        std::cout << "=== Canny Edge Detection RVV Pipeline ===\n";
+        std::cout << "Pipeline: Gaussian RVV -> Sobel RVV -> Magnitude L1 RVV -> Magnitude L2 scalar -> Direction scalar\n\n";
 
         /*
             Step 1: Load raw grayscale image.
@@ -98,57 +102,50 @@ int main(int argc, char* argv[]) {
         clock_gettime(CLOCK_MONOTONIC, &pipelineStart);
 
         /*
-            Step 2: Apply Gaussian blur.
+            Step 2: Apply Gaussian blur using RVV.
 
-            Gaussian blur reduces small noise before edge detection.
-            This is important because Sobel detects sudden intensity changes.
-            Without smoothing, noise could be detected as false edges.
-
-             implementation used :
-                - 5x5 Gaussian kernel
-                - integer coefficients
-                - kernel sum = 273
-                - zero-padding at borders
+            This should match the scalar Gaussian stage in purpose:
+            smoothing the image before Sobel edge detection.
         */
-        std::cout << "[2/6] Applying Gaussian blur...\n";
-        Image blurredImage = gaussianBlur(originalImage);
+        std::cout << "[2/6] Applying Gaussian blur (RVV)...\n";
+        Image blurredImage = gaussianBlurRVV(originalImage);
 
         /*
-            Step 3: Compute Sobel gradients.
+            Step 3: Compute Sobel gradients using RVV.
 
-            Sobel X finds horizontal intensity changes.
-            A large Gx usually means a vertical edge.
-
-            Sobel Y finds vertical intensity changes.
-            A large Gy usually means a horizontal edge.
-
-            The outputs are Image16, not Image, because Sobel values:
-                - can be negative
-                - can be larger than 255
+            sobel_fused_rvv computes both Gx and Gy in one pass.
+            The outputs are Image16 because Sobel values can be negative
+            and can exceed the 0-255 range.
         */
-        std::cout << "[3/6] Computing Sobel gradients...\n";
-        Image16 gradientX = sobelX(blurredImage);
-        Image16 gradientY = sobelY(blurredImage);
+        std::cout << "[3/6] Computing Sobel gradients (RVV fused)...\n";
+        Image16 gradientX;
+        Image16 gradientY;
+        sobel_fused_rvv(blurredImage, gradientX, gradientY);
 
         /*
-            Step 4: Compute L1 gradient magnitude.
+            Step 4: Compute L1 gradient magnitude using RVV.
 
             L1 magnitude formula:
                 |Gx| + |Gy|
+
+            This is also used as the final visual edge output,
+            exactly like the scalar main version.
         */
-        std::cout << "[4/6] Computing L1 gradient magnitude...\n";
-        Image magnitudeL1Image = magnitudeL1(gradientX, gradientY);
+        std::cout << "[4/6] Computing L1 gradient magnitude (RVV)...\n";
+        Image magnitudeL1Image = magnitudeL1Rvv(gradientX, gradientY);
 
         /*
-            Step 5: Compute L2 gradient magnitude.
+            Step 5: Compute L2 gradient magnitude using scalar.
 
-            L2 magnitude formula: sqrt(Gx^2 + Gy^2)
+            L2 magnitude formula:
+                sqrt(Gx^2 + Gy^2)
         */
-        std::cout << "[5/6] Computing L2 gradient magnitude...\n";
+        std::cout << "[5/6] Computing L2 gradient magnitude (scalar)...\n";
         Image magnitudeL2Image = magnitudeL2(gradientX, gradientY);
 
         /*
-            Step 6: Quantize gradient direction.
+            Step 6: Quantize gradient direction using scalar.
+
             We only classify the direction into 4 categories:
 
                 0 = 0 degrees
@@ -156,7 +153,7 @@ int main(int argc, char* argv[]) {
                 2 = 90 degrees
                 3 = 135 degrees
         */
-        std::cout << "[6/6] Computing gradient direction...\n";
+        std::cout << "[6/6] Computing gradient direction (scalar)...\n";
         Image directionImage = gradientDirection(gradientX, gradientY);
 
         clock_gettime(CLOCK_MONOTONIC, &pipelineEnd);
@@ -164,13 +161,18 @@ int main(int argc, char* argv[]) {
         double pipelineMilliseconds =
             elapsedMilliseconds(pipelineStart, pipelineEnd);
 
-       
-           // Save output images: We save multiple outputs because each one helps with debugging
-           // blur image: confirms Gaussian blur works
-           // magnitude images: show detected edges
-           // direction image: shows quantized edge direction values
-           // edges image: same as L1 magnitude, saved as the final visual edge output
+        /*
+            Save output images.
 
+            Same output logic as main.cpp:
+            - blur image: confirms Gaussian blur works
+            - magnitude images: show detected edges
+            - direction image: shows quantized edge direction values
+            - edges image: same as L1 magnitude, saved as the final visual edge output
+
+            No threshold is applied here, so the output should look like
+            the original good edge image.
+        */
         std::cout << "\nSaving output files...\n";
 
         std::string blurOutputFile =
@@ -193,10 +195,10 @@ int main(int argc, char* argv[]) {
         saveRawImage(magnitudeL2OutputFile, magnitudeL2Image);
         saveRawImage(directionOutputFile, directionImage);
 
-        // Final output photo: same edge map as the original good result.
+        // Final output photo: same logic as scalar main.
+        // This is the visual edge map of the implemented pipeline.
         saveRawImage(edgesOutputFile, magnitudeL1Image);
 
-        
         std::cout << "\nPipeline completed successfully.\n";
         std::cout << "Generated files:\n";
         std::cout << "  " << blurOutputFile << "\n";
@@ -213,10 +215,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     catch (const std::exception& error) {
-            // This catches errors such as:
-           // input file could not be opened, memory allocation failed , or output file could not be written
         std::cerr << "Error: " << error.what() << "\n";
         return 1;
     }
 }
-
