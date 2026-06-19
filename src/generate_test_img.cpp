@@ -1,8 +1,8 @@
 #include "image_io.h"
 
 int main() {
-    const int W = 256;
-    const int H = 256;
+    const int W = 512;
+    const int H = 512;
 
     // Rectangle image
     Image rect;
