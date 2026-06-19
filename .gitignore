@@ -59,3 +59,25 @@ test_gaussian
 test_direction
 
 sobel_rvv_test
+
+# Build binaries / local executables
+benchmark_*
+test_*
+canny_*
+gen_test_img
+benchm
+
+# Local image inputs and generated outputs
+input/
+output/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Raw/generated image files
+*.raw
+*.png
+*.jpg
+*.jpeg
+*.jfif
