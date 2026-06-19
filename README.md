@@ -1,6 +1,3 @@
-# canny-edge-detection
-
-
 
 # Canny Edge Detection with RISC-V RVV
 
