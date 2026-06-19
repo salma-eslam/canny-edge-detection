@@ -1,21 +1,6 @@
 # =============================================================================
 # Canny Edge Detection — Makefile
 # =============================================================================
-#
-# How to explain this to teammates:
-#
-# This Makefile is a shortcut system for compiling and running the project.
-# Instead of typing long compiler commands every time, we define named
-# targets.
-#
-#   make main           - compiles the scalar pipeline (main.cpp)
-#   make main01          - compiles the RVV pipeline (main01.cpp)
-#   make main_separable  - compiles the separable Gaussian mixed pipeline
-#
-# The compiler is selected by the target:
-# =============================================================================
-# Canny Edge Detection - Dual-target Makefile
-# =============================================================================
 # Official RVV compiler required by the project: riscv64-unknown-elf-g++
 # Host/scalar compiler: g++
 #
